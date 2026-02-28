@@ -92,10 +92,16 @@ class WeChatAutoPublisher:
         """
         创建默认封面图
 
-        优先级：
-        1. 本地封面库（推荐，国内访问快）
-        2. Unsplash/Picsum（备用）
-        3. 本地模板（兜底）
+        多源智能选择（按优先级）：
+        1. 本地封面库（用户准备的图片）
+        2. Picsum（免费图库，国内可访问）
+        3. Unsplash Source（备用）
+        4. 本地模板生成（兜底）
+
+        特点：
+        - 自动尝试多个源
+        - 失败自动降级到下一个
+        - 国内访问友好
 
         Args:
             title: 文章标题
@@ -104,32 +110,11 @@ class WeChatAutoPublisher:
             图片本地路径
         """
         import sys
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+        from utils.multi_source_generator import MultiSourceCoverGenerator
 
-        # 1. 优先使用本地封面库（国内用户推荐）
-        try:
-            from utils.local_gallery import LocalCoverGallery
-            gallery = LocalCoverGallery("covers")
-            if gallery.get_count() > 0:
-                return gallery.generate(topic="tech")
-            else:
-                print("⚠️ 本地封面库为空，尝试其他方案...")
-        except Exception as e:
-            print(f"⚠️ 本地封面库不可用: {e}")
-
-        # 2. 尝试 Unsplash（国外图库）
-        try:
-            from utils.unsplash_generator import UnsplashCoverGenerator
-            generator = UnsplashCoverGenerator()
-            return generator.generate(title, topic="tech")
-        except Exception as e:
-            print(f"⚠️ Unsplash 不可用: {e}")
-
-        # 3. 兜底：使用本地模板生成
-        print("🎨 使用本地模板生成封面...")
-        from utils.cover_generator import AdvancedCoverGenerator
-        generator = AdvancedCoverGenerator()
-        return generator.generate(title, style="local")
+        generator = MultiSourceCoverGenerator("covers")
+        return generator.generate(title, topic="tech")
 
     def upload_image(self, image_path: str) -> str:
         """
