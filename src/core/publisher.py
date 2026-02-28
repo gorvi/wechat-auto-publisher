@@ -92,6 +92,8 @@ class WeChatAutoPublisher:
         """
         创建默认封面图
         
+        优先使用 Unsplash 免费图库，失败时使用本地模板
+        
         Args:
             title: 文章标题
             
@@ -100,10 +102,17 @@ class WeChatAutoPublisher:
         """
         import sys
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-        from utils.cover_generator import CoverGenerator
         
-        generator = CoverGenerator()
-        return generator.generate(title, style="local")
+        # 尝试使用 Unsplash（高质量真实图片）
+        try:
+            from utils.unsplash_generator import UnsplashCoverGenerator
+            generator = UnsplashCoverGenerator()
+            return generator.generate(title, topic="tech")
+        except Exception as e:
+            print(f"⚠️ Unsplash 不可用，使用本地模板: {e}")
+            from utils.cover_generator import AdvancedCoverGenerator
+            generator = AdvancedCoverGenerator()
+            return generator.generate(title, style="local")
     
     def upload_image(self, image_path: str) -> str:
         """
