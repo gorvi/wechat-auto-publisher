@@ -93,52 +93,17 @@ class WeChatAutoPublisher:
         创建默认封面图
         
         Args:
-            title: 文章标题（用于生成封面文字）
+            title: 文章标题
             
         Returns:
             图片本地路径
         """
-        try:
-            from PIL import Image, ImageDraw, ImageFont
-            
-            # 创建图片
-            img = Image.new('RGB', (900, 383), color='#1890ff')
-            draw = ImageDraw.Draw(img)
-            
-            # 尝试使用系统字体
-            try:
-                # macOS系统字体
-                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 48)
-                small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
-            except:
-                font = ImageFont.load_default()
-                small_font = ImageFont.load_default()
-            
-            # 添加装饰元素
-            draw.rectangle([50, 50, 850, 333], outline='white', width=2)
-            
-            # 添加文字
-            text = "WeChat Auto Publisher"
-            bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            x = (900 - text_width) / 2
-            draw.text((x, 140), text, fill='white', font=font)
-            
-            # 添加日期
-            date_text = datetime.now().strftime("%Y-%m-%d")
-            bbox2 = draw.textbbox((0, 0), date_text, font=small_font)
-            date_width = bbox2[2] - bbox2[0]
-            x2 = (900 - date_width) / 2
-            draw.text((x2, 220), date_text, fill='white', font=small_font)
-            
-            # 保存
-            img_path = f'/tmp/wechat_cover_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
-            img.save(img_path)
-            
-            return img_path
-            
-        except ImportError:
-            raise WeChatAPIError("需要安装Pillow库才能生成封面图: pip install Pillow")
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+        from utils.cover_generator import CoverGenerator
+        
+        generator = CoverGenerator()
+        return generator.generate(title, style="local")
     
     def upload_image(self, image_path: str) -> str:
         """
