@@ -12,9 +12,26 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from core.publisher import WeChatAutoPublisher
 
 
-def test_basic_publish():
+def test_token_only():
+    """仅测试获取Token（不发布）"""
+    print("🧪 测试获取Access Token")
+    print("=" * 60)
+    
+    try:
+        publisher = WeChatAutoPublisher()
+        token = publisher._refresh_token()
+        print(f"✅ Token获取成功: {token[:20]}...")
+        print(f"   有效期: 7200秒（2小时）")
+        return True
+    except Exception as e:
+        print(f"❌ Token获取失败: {e}")
+        return False
+
+
+def test_basic_publish(publish_now=False):
     """测试基础发布功能"""
-    print("🧪 测试微信文章发布功能")
+    action = "发布" if publish_now else "保存草稿"
+    print(f"🧪 测试微信文章{action}功能")
     print("=" * 60)
     
     # 测试内容
@@ -37,7 +54,8 @@ from wechat_auto_publisher import WeChatAutoPublisher
 publisher = WeChatAutoPublisher()
 publisher.publish_article(
     title="标题",
-    markdown_content="# 内容"
+    markdown_content="# 内容",
+    publish=False  # 只存草稿箱
 )
 ```
 
@@ -45,7 +63,7 @@ publisher.publish_article(
 
 1. 配置环境变量
 2. 运行测试脚本
-3. 验证发布结果
+3. 登录微信公众平台审核发布
 
 ---
 
@@ -58,18 +76,22 @@ publisher.publish_article(
         publisher = WeChatAutoPublisher()
         print("✅ 初始化成功\n")
         
-        # 发布文章
-        print(f"📝 准备发布: {test_title}")
-        result = publisher.publish_article(
+        # 发布文章（默认只存草稿箱）
+        print(f"📝 准备{action}: {test_title}")
+        success, media_id, publish_id = publisher.publish_article(
             title=test_title,
             markdown_content=test_content,
-            verbose=True
+            verbose=True,
+            publish=publish_now  # False=存草稿, True=直接发布
         )
         
-        if result:
+        if success:
             print("\n" + "=" * 60)
-            print("🎉 测试通过！文章发布成功")
-            print("请登录微信公众平台查看文章")
+            if publish_now:
+                print("🎉 测试通过！文章已发布")
+            else:
+                print("🎉 测试通过！文章已保存到草稿箱")
+                print("请登录微信公众平台查看并发布")
             return True
         else:
             print("\n❌ 测试失败")
@@ -82,32 +104,17 @@ publisher.publish_article(
         return False
 
 
-def test_token_only():
-    """仅测试获取Token（不发布）"""
-    print("🧪 测试获取Access Token")
-    print("=" * 60)
-    
-    try:
-        publisher = WeChatAutoPublisher()
-        token = publisher._refresh_token()
-        print(f"✅ Token获取成功: {token[:20]}...")
-        print(f"   有效期: 7200秒（2小时）")
-        return True
-    except Exception as e:
-        print(f"❌ Token获取失败: {e}")
-        return False
-
-
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='测试微信文章发布')
     parser.add_argument('--token-only', action='store_true', help='仅测试获取Token')
+    parser.add_argument('--publish', '-p', action='store_true', help='直接发布（默认只存草稿箱）')
     args = parser.parse_args()
     
     if args.token_only:
         success = test_token_only()
     else:
-        success = test_basic_publish()
+        success = test_basic_publish(publish_now=args.publish)
     
     sys.exit(0 if success else 1)

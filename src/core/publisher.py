@@ -394,10 +394,11 @@ class WeChatAutoPublisher:
         thumb_media_id: str = None,
         author: str = None,
         verbose: bool = True,
-        auto_cover: bool = True
-    ) -> bool:
+        auto_cover: bool = True,
+        publish: bool = False  # 默认只存草稿箱，不发布
+    ) -> tuple:
         """
-        完整发布流程：创建封面 -> Markdown转HTML -> 上传草稿 -> 发布
+        完整发布流程：创建封面 -> Markdown转HTML -> 上传草稿 -> [可选]发布
         
         Args:
             title: 文章标题
@@ -406,13 +407,17 @@ class WeChatAutoPublisher:
             author: 作者名
             verbose: 是否打印进度
             auto_cover: 是否自动生成封面图
+            publish: 是否直接发布（False=只存草稿箱，True=直接发布）
             
         Returns:
-            是否发布成功
+            (是否成功, media_id, publish_id或None)
         """
         if verbose:
             print(f"\n{'='*60}")
-            print(f"📝 开始发布: {title}")
+            if publish:
+                print(f"📝 开始发布: {title}")
+            else:
+                print(f"📝 保存到草稿箱: {title}")
             print(f"{'='*60}")
         
         try:
@@ -438,18 +443,26 @@ class WeChatAutoPublisher:
             media_id = self.upload_draft(title, html_content, thumb_media_id, author)
             if verbose:
                 print(f"✅ 草稿上传成功")
+                print(f"   media_id: {media_id}")
             
-            # 4. 发布
-            publish_id = self.publish(media_id)
-            if verbose:
-                print(f"\n🎉 文章发布成功!")
-                print(f"   标题: {title}")
-                print(f"   publish_id: {publish_id}")
-                print(f"   时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            return True
+            # 4. 可选：发布
+            if publish:
+                publish_id = self.publish(media_id)
+                if verbose:
+                    print(f"\n🎉 文章发布成功!")
+                    print(f"   标题: {title}")
+                    print(f"   publish_id: {publish_id}")
+                    print(f"   时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                return True, media_id, publish_id
+            else:
+                if verbose:
+                    print(f"\n📋 文章已保存到草稿箱")
+                    print(f"   标题: {title}")
+                    print(f"   media_id: {media_id}")
+                    print(f"   请登录微信公众平台审核后发布")
+                return True, media_id, None
             
         except WeChatAPIError as e:
             if verbose:
-                print(f"\n❌ 发布失败: {e}")
-            return False
+                print(f"\n❌ 操作失败: {e}")
+            return False, None, None
