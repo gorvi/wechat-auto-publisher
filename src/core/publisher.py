@@ -325,7 +325,14 @@ class WeChatAutoPublisher:
         
         articles = [article]
         
-        resp = requests.post(url, json={"articles": articles}, timeout=30)
+        # 使用 ensure_ascii=False 确保中文字符不被转义
+        import json
+        resp = requests.post(
+            url, 
+            data=json.dumps({"articles": articles}, ensure_ascii=False).encode('utf-8'),
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            timeout=30
+        )
         data = resp.json()
         
         if "media_id" in data:
@@ -350,7 +357,12 @@ class WeChatAutoPublisher:
         token = self._ensure_token()
         url = f"https://api.weixin.qq.com/cgi-bin/freepublish/submit?access_token={token}"
         
-        resp = requests.post(url, json={"media_id": media_id}, timeout=30)
+        resp = requests.post(
+            url, 
+            data=json.dumps({"media_id": media_id}, ensure_ascii=False).encode('utf-8'),
+            headers={'Content-Type': 'application/json; charset=utf-8'},
+            timeout=30
+        )
         data = resp.json()
         
         if data.get("errcode") == 0:
