@@ -120,3 +120,16 @@ class FeishuBitableStorage:
         
         response = requests.put(url, headers=self.headers, json=data, timeout=30)
         return response.json().get('code') == 0
+    
+    def delete_topic(self, record_id: str) -> bool:
+        """删除话题"""
+        url = f"{self.base_url}/apps/{self.app_token}/tables/{self.table_id}/records/{record_id}"
+        
+        response = requests.delete(url, headers=self.headers, timeout=30)
+        result = response.json()
+        
+        if result.get('code') == 0:
+            return True
+        else:
+            print(f"⚠️  删除失败: {result.get('msg')}")
+            return False
