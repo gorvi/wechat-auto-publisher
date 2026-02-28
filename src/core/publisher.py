@@ -23,7 +23,7 @@ class WeChatAutoPublisher:
     
     功能：
     - 获取Access Token
-    - 上传图文素材
+    - 上传封面图和图文素材
     - 发布文章
     - Markdown转HTML
     """
@@ -87,6 +87,58 @@ class WeChatAutoPublisher:
                 
         except requests.RequestException as e:
             raise WeChatAPIError(f"请求失败: {e}")
+    
+    def create_default_cover(self, title: str = "Article") -> str:
+        """
+        创建默认封面图
+        
+        Args:
+            title: 文章标题（用于生成封面文字）
+            
+        Returns:
+            图片本地路径
+        """
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            
+            # 创建图片
+            img = Image.new('RGB', (900, 383), color='#1890ff')
+            draw = ImageDraw.Draw(img)
+            
+            # 尝试使用系统字体
+            try:
+                # macOS系统字体
+                font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 48)
+                small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
+            except:
+                font = ImageFont.load_default()
+                small_font = ImageFont.load_default()
+            
+            # 添加装饰元素
+            draw.rectangle([50, 50, 850, 333], outline='white', width=2)
+            
+            # 添加文字
+            text = "WeChat Auto Publisher"
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            x = (900 - text_width) / 2
+            draw.text((x, 140), text, fill='white', font=font)
+            
+            # 添加日期
+            date_text = datetime.now().strftime("%Y-%m-%d")
+            bbox2 = draw.textbbox((0, 0), date_text, font=small_font)
+            date_width = bbox2[2] - bbox2[0]
+            x2 = (900 - date_width) / 2
+            draw.text((x2, 220), date_text, fill='white', font=small_font)
+            
+            # 保存
+            img_path = f'/tmp/wechat_cover_{datetime.now().strftime("%Y%m%d_%H%M%S")}.png'
+            img.save(img_path)
+            
+            return img_path
+            
+        except ImportError:
+            raise WeChatAPIError("需要安装Pillow库才能生成封面图: pip install Pillow")
     
     def upload_image(self, image_path: str) -> str:
         """
@@ -230,7 +282,7 @@ class WeChatAutoPublisher:
         self, 
         title: str, 
         html_content: str, 
-        thumb_media_id: str = None,
+        thumb_media_id: str,
         author: str = None,
         content_source_url: str = ""
     ) -> str:
@@ -240,7 +292,7 @@ class WeChatAutoPublisher:
         Args:
             title: 文章标题
             html_content: HTML格式内容
-            thumb_media_id: 封面图media_id
+            thumb_media_id: 封面图media_id（必需）
             author: 作者名
             content_source_url: 原文链接
             
@@ -250,22 +302,28 @@ class WeChatAutoPublisher:
         Raises:
             WeChatAPIError: 上传失败
         """
+        if not thumb_media_id:
+            raise WeChatAPIError("封面图media_id是必需的，请先上传封面图")
+        
         token = self._ensure_token()
         url = f"https://api.weixin.qq.com/cgi-bin/draft/add?access_token={token}"
         
         # 生成摘要
-        digest = re.sub(r'<[^\u003e]+>', '', html_content)[:100] + "..."
+        digest = re.sub(r'<[^>]+>', '', html_content)[:100] + "..."
         
-        articles = [{
+        # 构建文章数据
+        article = {
             "title": title,
+            "thumb_media_id": thumb_media_id,
             "author": author or os.getenv("DEFAULT_AUTHOR", "AI助手"),
             "digest": digest,
             "content": html_content,
             "content_source_url": content_source_url,
-            "thumb_media_id": thumb_media_id or "",
             "need_open_comment": 1,
             "only_fans_can_comment": 0
-        }]
+        }
+        
+        articles = [article]
         
         resp = requests.post(url, json={"articles": articles}, timeout=30)
         data = resp.json()
@@ -323,17 +381,19 @@ class WeChatAutoPublisher:
         markdown_content: str,
         thumb_media_id: str = None,
         author: str = None,
-        verbose: bool = True
+        verbose: bool = True,
+        auto_cover: bool = True
     ) -> bool:
         """
-        完整发布流程：Markdown -> HTML -> 草稿 -> 发布
+        完整发布流程：创建封面 -> Markdown转HTML -> 上传草稿 -> 发布
         
         Args:
             title: 文章标题
             markdown_content: Markdown内容
-            thumb_media_id: 封面图media_id
+            thumb_media_id: 封面图media_id（可选，不提供则自动生成）
             author: 作者名
             verbose: 是否打印进度
+            auto_cover: 是否自动生成封面图
             
         Returns:
             是否发布成功
@@ -344,17 +404,30 @@ class WeChatAutoPublisher:
             print(f"{'='*60}")
         
         try:
-            # 1. Markdown转HTML
+            # 1. 处理封面图
+            if not thumb_media_id and auto_cover:
+                if verbose:
+                    print("🎨 生成封面图...")
+                cover_path = self.create_default_cover(title)
+                thumb_media_id = self.upload_image(cover_path)
+                # 清理临时文件
+                os.remove(cover_path)
+                if verbose:
+                    print(f"✅ 封面上传成功")
+            elif not thumb_media_id and not auto_cover:
+                raise WeChatAPIError("请提供封面图media_id，或设置auto_cover=True自动生成")
+            
+            # 2. Markdown转HTML
             html_content = self.markdown_to_html(markdown_content)
             if verbose:
                 print("✅ Markdown转HTML完成")
             
-            # 2. 上传草稿
+            # 3. 上传草稿
             media_id = self.upload_draft(title, html_content, thumb_media_id, author)
             if verbose:
                 print(f"✅ 草稿上传成功")
             
-            # 3. 发布
+            # 4. 发布
             publish_id = self.publish(media_id)
             if verbose:
                 print(f"\n🎉 文章发布成功!")
