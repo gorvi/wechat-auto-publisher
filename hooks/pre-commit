@@ -1,0 +1,83 @@
+#!/bin/bash
+# Pre-commit hook: 检测敏感信息（API密钥、密码等）
+# 安装: 复制到 .git/hooks/pre-commit 并 chmod +x
+
+set -e
+
+echo "🔍 正在检查敏感信息..."
+
+# 定义需要检测的模式（正则表达式）
+GOOGLE_API_KEY_PATTERN='AIzaSy[A-Za-z0-9_-]{33}'
+OPENAI_KEY_PATTERN='sk-[a-zA-Z0-9]{20,}'
+AWS_KEY_PATTERN='AKIA[0-9A-Z]{16}'
+PRIVATE_KEY_PATTERN='BEGIN .* PRIVATE KEY'
+
+# 获取暂存区的文件列表
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null || true)
+
+if [ -z "$STAGED_FILES" ]; then
+    echo "✅ 没有暂存文件需要检查"
+    exit 0
+fi
+
+FOUND_ISSUES=0
+
+for file in $STAGED_FILES; do
+    # 跳过二进制文件
+    if [[ "$file" =~ \.(jpg|jpeg|png|gif|ico|pdf|zip|tar|gz|exe|dll|so|dylib)$ ]]; then
+        continue
+    fi
+    
+    # 跳过示例文件、文档和 hook 文件本身
+    if [[ "$file" == *.example ]] || [[ "$file" == *.sample ]] || [[ "$file" == *.md ]] || [[ "$file" == *hooks/pre-commit* ]]; then
+        continue
+    fi
+    
+    # 获取文件内容
+    if git cat-file -e :"$file" 2>/dev/null; then
+        content=$(git show :"$file" 2>/dev/null || true)
+        
+        # 检查 Google API Key
+        if echo "$content" | grep -E "$GOOGLE_API_KEY_PATTERN" >/dev/null 2>&1; then
+            echo "❌ 发现 Google API Key 在文件: $file"
+            echo "   请使用环境变量，不要硬编码密钥！"
+            FOUND_ISSUES=$((FOUND_ISSUES + 1))
+        fi
+        
+        # 检查 OpenAI Key
+        if echo "$content" | grep -E "$OPENAI_KEY_PATTERN" >/dev/null 2>&1; then
+            echo "❌ 发现 OpenAI API Key 在文件: $file"
+            echo "   请使用环境变量，不要硬编码密钥！"
+            FOUND_ISSUES=$((FOUND_ISSUES + 1))
+        fi
+        
+        # 检查 AWS Key
+        if echo "$content" | grep -E "$AWS_KEY_PATTERN" >/dev/null 2>&1; then
+            echo "❌ 发现 AWS Access Key 在文件: $file"
+            FOUND_ISSUES=$((FOUND_ISSUES + 1))
+        fi
+        
+        # 检查私钥
+        if echo "$content" | grep -E "$PRIVATE_KEY_PATTERN" >/dev/null 2>&1; then
+            echo "❌ 发现私钥内容在文件: $file"
+            FOUND_ISSUES=$((FOUND_ISSUES + 1))
+        fi
+    fi
+done
+
+if [ $FOUND_ISSUES -gt 0 ]; then
+    echo ""
+    echo "🚫 提交被阻止！发现 $FOUND_ISSUES 个敏感信息问题。"
+    echo ""
+    echo "💡 解决方案:"
+    echo "   1. 将密钥移到 .env 文件（确保 .env 在 .gitignore 中）"
+    echo "   2. 代码中使用 os.getenv('KEY_NAME') 读取环境变量"
+    echo "   3. 提供 .env.example 作为配置模板"
+    echo ""
+    echo "   如果确定要提交（不推荐），使用: git commit --no-verify"
+    echo ""
+    exit 1
+fi
+
+echo "✅ 敏感信息检查通过"
+exit 0
